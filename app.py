@@ -2,8 +2,8 @@
 app.py
 
 Gradio interface for FitFindr. The layout and wiring are already set up —
-your job is to fill in handle_query() so it calls run_agent() and maps
-the session results to the three output panels.
+handle_query() calls run_agent() and maps the session results to the three
+output panels.
 
 Run with:
     python app.py
@@ -32,19 +32,55 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         A tuple of three strings:
             (listing_text, outfit_suggestion, fit_card)
         Each string maps to one of the three output panels in the UI.
-
-    TODO:
-        1. Guard against an empty query (return early with an error message).
-        2. Select the wardrobe based on wardrobe_choice.
-        3. Call run_agent() with the query and selected wardrobe.
-        4. If session["error"] is set, return the error in the first panel
-           and empty strings for the other two.
-        5. Otherwise, format session["selected_item"] into a readable listing_text
-           string and return it along with session["outfit_suggestion"] and
-           session["fit_card"].
     """
-    # TODO: implement this function
-    return "Agent not yet implemented.", "", ""
+    # Step 1: Guard against empty query
+    if not user_query or not user_query.strip():
+        return "Please enter a search query to get started.", "", ""
+
+    # Step 2: Select wardrobe based on user choice
+    if wardrobe_choice == "Example wardrobe":
+        wardrobe = get_example_wardrobe()
+    else:
+        wardrobe = get_empty_wardrobe()
+
+    # Step 3: Run the agent
+    session = run_agent(user_query, wardrobe)
+
+    # Step 4: If error, return error in panel 1, empty strings for panels 2 & 3
+    if session["error"]:
+        return session["error"], "", ""
+
+    # Step 5: Format the selected item into readable listing text
+    item = session["selected_item"]
+    brand_str = f" by {item['brand']}" if item.get("brand") else ""
+    colors_str = ", ".join(item.get("colors", []))
+
+    listing_text = (
+        f"{item['title']}{brand_str}\n"
+        f"${item['price']:.2f}  ·  {item['platform']}  ·  {item['condition']} condition\n"
+        f"Size: {item['size']}  ·  Colors: {colors_str}\n\n"
+        f"{item['description']}"
+    )
+
+    # Add retry note if search was loosened
+    if session.get("retry_note"):
+        listing_text = f"⚠️ {session['retry_note']}\n\n" + listing_text
+
+    # Add price assessment if available (stretch)
+    if session.get("price_assessment"):
+        pa = session["price_assessment"]
+        if pa["assessment"] != "unknown":
+            emoji = {"below average": "🟢", "fair": "🟡", "above average": "🔴"}.get(
+                pa["assessment"], "💰"
+            )
+            listing_text += (
+                f"\n\n{emoji} Price check: {pa['verdict']}"
+            )
+
+    outfit_text = session["outfit_suggestion"] or ""
+    fitcard_text = session["fit_card"] or ""
+
+    return listing_text, outfit_text, fitcard_text
 
 
 # ── interface ─────────────────────────────────────────────────────────────────
